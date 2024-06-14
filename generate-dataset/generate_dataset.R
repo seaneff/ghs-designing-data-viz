@@ -41,6 +41,12 @@ library(dplyr) ## for data manipulation
 names <- read_excel("generate-dataset/inputs/country_names.xlsx")
 
 #############################################
+## ISO lookup ###############################
+#############################################
+
+iso_lookup <- read_excel("generate-dataset/inputs/iso_lookup.xls")
+
+#############################################
 ## Country population data ##################
 #############################################
 
@@ -65,7 +71,7 @@ names(population_wide)[which(names(population_wide) == "Population, total")] <- 
 names(population_wide)[which(names(population_wide) == "Mortality rate, under-5 (per 1,000)")] <- "under_5_mortality_per1000"
 
 #############################################
-## GDP per capita data#######################
+## GDP per capita data ######################
 #############################################
 
 gdp <- read.csv("generate-dataset/inputs/GDP per capita (current US$).csv", fileEncoding = "Latin1")
@@ -79,6 +85,27 @@ gdp_partial <- gdp[,-1]
 income_groups <- read.csv("generate-dataset/inputs/wb_income_groups.csv", fileEncoding = "Latin1")
 names(income_groups) <- c("country", "iso_code", "region", "income_group", "lending_category")
 income_groups_partial <- income_groups[,-c(1,5)]
+
+
+#############################################
+## Burden of disease ########################
+#############################################
+
+disease <- read.csv("generate-dataset/inputs/IHME-GBD_2021_DATA-6037c6b5-1.csv", fileEncoding = "Latin1")
+disease[which(disease$location == "TÃ¼rkiye"),]$location <- "Turkey"
+disease[which(disease$location == "CÃ´te d'Ivoire"),]$location <- "Côte d'Ivoire"
+
+disease_with_iso <- merge(disease, iso_lookup, by.x = "location", by.y = "country_name")
+
+disease_with_iso_2021 <- disease_with_iso[which(disease_with_iso$year == 2021 & 
+                         disease_with_iso$sex == "Both" &
+                         disease_with_iso$age == "All ages" &
+                         disease_with_iso$measure == "Prevalence" &
+                         disease_with_iso$metric == "Percent"),]
+
+wide_disease <- pivot_wider(disease_with_iso_2021[,c(5,8,12)], names_from = cause, values_from = c(val))
+
+names(wide_disease) <- paste(gsub(" ", "_", gsub("/", "_", gsub("-", "_", tolower(names(wide_disease))))), "_prevalence_pct", sep = "")
 
 #############################################
 ## CHW data (most recent) ###################
@@ -252,10 +279,23 @@ wide_filtered_dataset$most_recent_lab_scientists_per10000 <- wide_filtered_datas
 wide_filtered_dataset$most_recent_physiotherapists_per10000 <- wide_filtered_dataset$most_recent_physiotherapists_number/wide_filtered_dataset$total_population*10000
 wide_filtered_dataset$most_recent_traditional_med_professionals_per10000 <- wide_filtered_dataset$most_recent_traditional_med_professionals_number/wide_filtered_dataset$total_population*10000
 
+################################################################
+## Add burden of disease info with YET ANOTHER JOIN ############
+################################################################
 
-write.table(wide_filtered_dataset[c(1,2,26,27,25,21,22,23,5,6,13,14,15,16,7,8,29,4,30,10,31,12,32,18,33,20)],
-            sep = "\t",
-            file = "country_workforce_data.tsv", 
-            na = "NA",
-            row.names = FALSE,
-            fileEncoding = "Latin1")
+## and yet one more merge
+## the name of alpha_3 is bad and lazy but I'm not going to fix it right now
+wide_filtered_dataset_plus <- as.data.frame(merge(wide_filtered_dataset, wide_disease,
+                                    by.x = "iso_code", by.y = "alpha_3_prevalence_pct"),
+                                    all.x = TRUE, all.y = FALSE)
+
+################################################################
+## Save single neat dataset ####################################
+################################################################
+
+# write.table(wide_filtered_dataset_plus[c(1,2,26,27,25,21,22,23,5,6,13,14,15,16,7,8,29,4,30,10,31,12,32,18,33,20, 34:52)],
+#             sep = "\t",
+#             file = "country_workforce_data.tsv", 
+#             na = "NA",
+#             row.names = FALSE,
+#             fileEncoding = "Latin1")
